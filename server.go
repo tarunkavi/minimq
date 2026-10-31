@@ -4,8 +4,6 @@ import (
 	"io"
 	"log"
 	"net"
-
-	"github.com/go-stomp/stomp/v3/frame"
 )
 
 // Server accepts TCP connections and handles each client in its own goroutine.
@@ -44,18 +42,14 @@ func (s *Server) handleConn(conn net.Conn) {
 	addr := conn.RemoteAddr()
 	log.Printf("client connected: %s", addr)
 
-	reader := frame.NewReader(conn)
+	codec := NewStompCodec(conn)
 	for {
-		f, err := reader.Read()
+		f, err := codec.ReadFrame()
 		if err != nil {
 			if err != io.EOF {
 				log.Printf("read from %s: %v", addr, err)
 			}
 			break
-		}
-		// A nil frame with no error is a heart-beat (an empty line).
-		if f == nil {
-			continue
 		}
 
 		log.Printf("from %s: command=%s", addr, f.Command)
