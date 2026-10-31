@@ -6,7 +6,6 @@ import (
 	"net"
 )
 
-// Server accepts TCP connections and handles each client in its own goroutine.
 type Server struct {
 	addr     string
 	listener net.Listener

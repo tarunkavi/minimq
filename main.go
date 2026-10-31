@@ -2,7 +2,6 @@ package main
 
 import "log"
 
-// 5672 is the standard AMQP port that RabbitMQ listens on.
 const listenAddr = ":5672"
 
 func main() {
