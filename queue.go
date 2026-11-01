@@ -2,22 +2,39 @@ package main
 
 import "log"
 
+type OpKind int
+
+const (
+	OpEnqueue OpKind = iota
+)
+
+type QueueOp struct {
+	Kind OpKind
+	Body []byte
+}
+
 type Queue struct {
 	name     string
 	messages [][]byte
-	mailbox  chan []byte
+	mailbox  chan QueueOp
 }
 
 func NewQueue(name string) *Queue {
 	return &Queue{
 		name:    name,
-		mailbox: make(chan []byte),
+		mailbox: make(chan QueueOp),
 	}
 }
 
 func (q *Queue) Run() {
-	for msg := range q.mailbox {
-		log.Printf("queue %s received: %q", q.name, msg)
+	for op := range q.mailbox {
+		switch op.Kind {
+		case OpEnqueue:
+			log.Printf("queue %s received: %q", q.name, op.Body)
+			q.Enqueue(op.Body)
+		default:
+			log.Printf("queue %s: unknown op %d", q.name, op.Kind)
+		}
 	}
 }
 
