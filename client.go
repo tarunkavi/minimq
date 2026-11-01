@@ -90,6 +90,15 @@ func (c *Client) handleFrame(f *frame.Frame) {
 		go c.forward(sub)
 		c.queue.mailbox <- QueueOp{Kind: OpSubscribe, Body: f.Body, Name: name, Sub: sub}
 		log.Printf("from %s: SUBSCRIBE not implemented", addr)
+	case frame.UNSUBSCRIBE:
+		id := f.Header.Get(frame.Id)
+		sub, ok := c.subs[id]
+		if !ok {
+			log.Printf("from %s: no subscription with id %q", addr, id)
+			return
+		}
+		c.queue.mailbox <- QueueOp{Kind: OpUnsubscribe, Sub: sub}
+		delete(c.subs, id)
 	default:
 		log.Printf("from %s: operation not known: %s", addr, f.Command)
 	}

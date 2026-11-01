@@ -10,6 +10,7 @@ type OpKind int
 const (
 	OpEnqueue OpKind = iota
 	OpSubscribe
+	OpUnsubscribe
 )
 
 type QueueOp struct {
@@ -54,6 +55,10 @@ func (q *Queue) Run() {
 			q.subs = append(q.subs, op.Sub)
 			q.deliver()
 			log.Printf("queue %s: subscriber added, %d total", q.name, len(q.subs))
+		case OpUnsubscribe:
+			q.removeSub(op.Sub)
+			close(op.Sub.outputData)
+			log.Printf("queue %s: subscriber removed, %d total", q.name, len(q.subs))
 		default:
 			log.Printf("queue %s: unknown op %d", q.name, op.Kind)
 		}
@@ -65,6 +70,18 @@ func (q *Queue) deliver() {
 		message, _ := q.Dequeue()
 		sub := q.subs[rand.IntN(len(q.subs))] // make it roundrobin afterwords
 		sub.send(message)
+	}
+}
+
+func (q *Queue) removeSub(sub *Subscriber) {
+	for i, s := range q.subs {
+		if s == sub {
+			last := len(q.subs) - 1
+			q.subs[i] = q.subs[last]
+			q.subs[last] = nil
+			q.subs = q.subs[:last]
+			return
+		}
 	}
 }
 
