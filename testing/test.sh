@@ -10,7 +10,7 @@ PIDS=()
 FAILED=0
 
 cleanup() {
-	for pid in "${PIDS[@]}"; do kill "$pid" 2>/dev/null; done
+	for pid in ${PIDS[@]+"${PIDS[@]}"}; do kill "$pid" 2>/dev/null; done
 	wait 2>/dev/null
 	rm -rf "$TMP"
 }
@@ -45,6 +45,7 @@ fi
 go build -o "$TMP/minimq" . || exit 1
 go build -o "$TMP/send" ./testing || exit 1
 go build -o "$TMP/subscribe" ./testing/subscribe || exit 1
+go build -o "$TMP/unsubscribe" ./testing/unsubscribe || exit 1
 
 "$TMP/minimq" >"$TMP/server.log" 2>&1 &
 PIDS+=($!)
@@ -52,6 +53,10 @@ for _ in $(seq 50); do
 	nc -z localhost 5672 2>/dev/null && break
 	sleep 0.1
 done
+
+# Runs first: it removes its own subscribers when done, so the queue is empty again for the next tests.
+echo "Test 0: UNSUBSCRIBE"
+"$TMP/unsubscribe" -addr "$ADDR" || FAILED=1
 
 echo "Test 1: messages sent before anyone subscribes wait in the queue"
 send "early-1"
