@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"io"
 	"log"
 	"net"
@@ -16,24 +17,36 @@ type Client struct {
 	queue    *Queue
 	outgoing chan *frame.Frame
 	subs     map[string]*Subscriber
+	ctx      context.Context
+	cancel   context.CancelFunc
 }
 
 func NewClient(conn net.Conn, queue *Queue) *Client {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Client{
 		conn:     conn,
 		codec:    NewStompCodec(conn),
 		queue:    queue,
 		outgoing: make(chan *frame.Frame),
 		subs:     make(map[string]*Subscriber),
+		ctx:      ctx,
+		cancel:   cancel,
 	}
 }
 
 func (c *Client) startWriter() {
 	go func() {
-		for f := range c.outgoing {
-			if err := c.codec.WriteFrame(f); err != nil {
-				log.Printf("write to %s: %v", c.conn.RemoteAddr(), err)
+		for {
+			select {
+			case <-c.ctx.Done():
 				return
+			case f := <-c.outgoing:
+				if err := c.codec.WriteFrame(f); err != nil {
+					log.Printf("write to %s: %v", c.conn.RemoteAddr(), err)
+					c.conn.Close() //not c.Close() because c.Close() is touching the map this might cause some data races
+					c.cancel()
+					return
+				}
 			}
 		}
 	}()
@@ -69,6 +82,11 @@ func (c *Client) handleConn() {
 	log.Printf("client disconnected: %s", addr)
 }
 func (c *Client) Close() {
+	c.cancel()
+	for id, sub := range c.subs {
+		c.queue.mailbox <- QueueOp{Kind: OpUnsubscribe, Sub: sub}
+		delete(c.subs, id)
+	}
 	c.conn.Close()
 }
 
@@ -114,6 +132,10 @@ func (c *Client) forward(sub *Subscriber) {
 		)
 		count++
 		f.Body = data
-		c.outgoing <- f
+		select {
+		case c.outgoing <- f:
+		case <-c.ctx.Done():
+			// connection is closing: drop the message but keep reading until the queue closes outputData
+		}
 	}
 }
