@@ -106,7 +106,7 @@ func (c *Client) handleFrame(f *frame.Frame) {
 		sub := &Subscriber{
 			id:          id,
 			destination: destination,
-			outputData:  make(chan []byte),
+			outputData:  make(chan []byte, 1),
 		}
 		c.subs[id] = sub
 		go c.forward(sub)
@@ -129,6 +129,7 @@ func (c *Client) handleFrame(f *frame.Frame) {
 func (c *Client) forward(sub *Subscriber) {
 	count := 0
 	for data := range sub.outputData { //this is read only hence no need of any mutex for the writes in handleFrame.
+		c.queue.mailbox <- QueueOp{Kind: OpReady} // the slot in outputData is free again, so the queue can deliver the next message
 		f := frame.New(frame.MESSAGE,
 			frame.Subscription, sub.id,
 			frame.Destination, sub.destination,

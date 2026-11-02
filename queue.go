@@ -11,6 +11,7 @@ const (
 	OpEnqueue OpKind = iota
 	OpSubscribe
 	OpUnsubscribe
+	OpReady
 )
 
 type QueueOp struct {
@@ -33,8 +34,14 @@ type Subscriber struct {
 	outputData  chan []byte
 }
 
-func (s *Subscriber) send(data []byte) {
-	s.outputData <- data
+// send hands data to the subscriber only if it is ready right now, so the queue never waits.
+func (s *Subscriber) send(data []byte) bool {
+	select {
+	case s.outputData <- data:
+		return true
+	default:
+		return false
+	}
 }
 
 func NewQueue(name string) *Queue {
@@ -59,6 +66,8 @@ func (q *Queue) Run() {
 			q.removeSub(op.Sub)
 			close(op.Sub.outputData)
 			log.Printf("queue %s: subscriber removed, %d total", q.name, len(q.subs))
+		case OpReady:
+			q.deliver()
 		default:
 			log.Printf("queue %s: unknown op %d", q.name, op.Kind)
 		}
@@ -67,10 +76,22 @@ func (q *Queue) Run() {
 
 func (q *Queue) deliver() {
 	for len(q.messages) > 0 && len(q.subs) > 0 {
-		message, _ := q.Dequeue()
-		sub := q.subs[rand.IntN(len(q.subs))] // make it roundrobin afterwords
-		sub.send(message)
+		if !q.sendToAnySub(q.messages[0]) {
+			return // every subscriber is busy, the message stays at the front of the queue
+		}
+		q.Dequeue()
 	}
+}
+
+// sendToAnySub starts at a random subscriber and tries each one once.
+func (q *Queue) sendToAnySub(message []byte) bool {
+	start := rand.IntN(len(q.subs)) // make it roundrobin afterwords
+	for i := range len(q.subs) {
+		if q.subs[(start+i)%len(q.subs)].send(message) {
+			return true
+		}
+	}
+	return false
 }
 
 func (q *Queue) removeSub(sub *Subscriber) {
