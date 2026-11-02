@@ -97,6 +97,10 @@ func (c *Client) handleFrame(f *frame.Frame) {
 		c.queue.mailbox <- QueueOp{Kind: OpEnqueue, Body: f.Body}
 	case frame.SUBSCRIBE:
 		id := f.Header.Get(frame.Id)
+		if _, exists := c.subs[id]; exists {
+			log.Printf("from %s: subscription id %q already in use", addr, id)
+			return
+		}
 		destination := f.Header.Get(frame.Destination)
 		name := strings.TrimPrefix(destination, "/queue/")
 		sub := &Subscriber{
