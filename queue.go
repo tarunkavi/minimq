@@ -31,6 +31,7 @@ type Queue struct {
 type Subscriber struct {
 	id          string
 	destination string
+	queue       *Queue
 	outputData  chan []byte
 }
 

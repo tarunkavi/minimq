@@ -14,23 +14,23 @@ import (
 type Client struct {
 	conn     net.Conn
 	codec    *StompCodec
-	queue    *Queue
 	outgoing chan *frame.Frame
+	server   *Server
 	subs     map[string]*Subscriber
 	ctx      context.Context
 	cancel   context.CancelFunc
 }
 
-func NewClient(conn net.Conn, queue *Queue) *Client {
+func NewClient(conn net.Conn, server *Server) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Client{
 		conn:     conn,
 		codec:    NewStompCodec(conn),
-		queue:    queue,
 		outgoing: make(chan *frame.Frame),
 		subs:     make(map[string]*Subscriber),
 		ctx:      ctx,
 		cancel:   cancel,
+		server:   server,
 	}
 }
 
@@ -84,7 +84,7 @@ func (c *Client) handleConn() {
 func (c *Client) Close() {
 	c.cancel()
 	for id, sub := range c.subs {
-		c.queue.mailbox <- QueueOp{Kind: OpUnsubscribe, Sub: sub}
+		sub.queue.mailbox <- QueueOp{Kind: OpUnsubscribe, Sub: sub}
 		delete(c.subs, id)
 	}
 	c.conn.Close()
@@ -94,7 +94,12 @@ func (c *Client) handleFrame(f *frame.Frame) {
 	addr := c.conn.RemoteAddr()
 	switch f.Command {
 	case frame.SEND:
-		c.queue.mailbox <- QueueOp{Kind: OpEnqueue, Body: f.Body}
+		name := strings.TrimPrefix(f.Header.Get(frame.Destination), "/queue/")
+		queue, ok := c.server.getQueue(name)
+		if !ok {
+			queue = c.server.insertQueue(name)
+		}
+		queue.mailbox <- QueueOp{Kind: OpEnqueue, Body: f.Body}
 	case frame.SUBSCRIBE:
 		id := f.Header.Get(frame.Id)
 		if _, exists := c.subs[id]; exists {
@@ -103,15 +108,19 @@ func (c *Client) handleFrame(f *frame.Frame) {
 		}
 		destination := f.Header.Get(frame.Destination)
 		name := strings.TrimPrefix(destination, "/queue/")
+		queue, ok := c.server.getQueue(name)
+		if !ok {
+			queue = c.server.insertQueue(name)
+		}
 		sub := &Subscriber{
 			id:          id,
 			destination: destination,
+			queue:       queue,
 			outputData:  make(chan []byte, 1),
 		}
 		c.subs[id] = sub
 		go c.forward(sub)
-		c.queue.mailbox <- QueueOp{Kind: OpSubscribe, Body: f.Body, Name: name, Sub: sub}
-		log.Printf("from %s: SUBSCRIBE not implemented", addr)
+		queue.mailbox <- QueueOp{Kind: OpSubscribe, Sub: sub}
 	case frame.UNSUBSCRIBE:
 		id := f.Header.Get(frame.Id)
 		sub, ok := c.subs[id]
@@ -119,7 +128,7 @@ func (c *Client) handleFrame(f *frame.Frame) {
 			log.Printf("from %s: no subscription with id %q", addr, id)
 			return
 		}
-		c.queue.mailbox <- QueueOp{Kind: OpUnsubscribe, Sub: sub}
+		sub.queue.mailbox <- QueueOp{Kind: OpUnsubscribe, Sub: sub}
 		delete(c.subs, id)
 	default:
 		log.Printf("from %s: operation not known: %s", addr, f.Command)
@@ -129,7 +138,7 @@ func (c *Client) handleFrame(f *frame.Frame) {
 func (c *Client) forward(sub *Subscriber) {
 	count := 0
 	for data := range sub.outputData { //this is read only hence no need of any mutex for the writes in handleFrame.
-		c.queue.mailbox <- QueueOp{Kind: OpReady} // the slot in outputData is free again, so the queue can deliver the next message
+		sub.queue.mailbox <- QueueOp{Kind: OpReady} // the slot in outputData is free again, so the queue can deliver the next message
 		f := frame.New(frame.MESSAGE,
 			frame.Subscription, sub.id,
 			frame.Destination, sub.destination,
