@@ -95,6 +95,7 @@ func (q *Queue) sendToAnySub(message []byte) bool {
 	return false
 }
 
+// optimization for remove from slice. since a direct remove clause data reallocation of the next n elements
 func (q *Queue) removeSub(sub *Subscriber) {
 	for i, s := range q.subs {
 		if s == sub {
