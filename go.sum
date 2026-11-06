@@ -1,5 +1,7 @@
 github.com/go-stomp/stomp/v3 v3.2.1 h1:HRc/VHx/KXXPpq3C7nQISPIBf7xYJpx+rz17BGFKph4=
 github.com/go-stomp/stomp/v3 v3.2.1/go.mod h1:x9giSS7ZI9lTKgoTPBxN3rtxPTtWMyEEp5LF1EaZpfY=
+github.com/prometheus/client_golang v1.25.0 h1:cDtW1TcFsMi1RJc8khwCKB4VhzwV04aKqbYtNOXuiK0=
+github.com/prometheus/client_golang v1.25.0/go.mod h1:j2X/4/kaQHLPnmyEU8zjmkndo1T317VpCIQEml8LTKk=
 github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
 go.yaml.in/yaml/v3 v3.0.5 h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=
